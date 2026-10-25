@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body p-4 p-md-5">
+        <div class="text-center mb-4">
+          <div class="bg-primary text-white d-inline-flex align-items-center justify-content-center rounded-circle mb-3" style="width:64px;height:64px;">
+            <i class="bi bi-calendar-check fs-4"></i>
+          </div>
+          <h2 class="h4">AttendSmart</h2>
+          <p class="text-muted small">Sign in to continue</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('login') }}" novalidate>
+          <div class="mb-3">
+            <label class="form-label"><i class="bi bi-person me-1"></i>Roll Number</label>
+            <input type="text" name="roll_number" class="form-control" placeholder="e.g. 21CS001" required autofocus>
+          </div>
+          <div class="mb-4">
+            <label class="form-label"><i class="bi bi-key me-1"></i>Password</label>
+            <input type="password" name="password" class="form-control" placeholder="••••••••" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100 py-2">Sign in</button>
+        </form>
+
+        <hr class="my-4">
+        <div class="text-center small text-muted">
+          Demo accounts (all password <code>admin123</code>):<br>
+          <strong>Student:</strong> 21CS001, 21CS002, 21CS003<br>
+          <strong>Lecturer:</strong> HOD001 &nbsp;|&nbsp; <strong>CR:</strong> CR2025
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

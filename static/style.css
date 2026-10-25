@@ -1,0 +1,32 @@
+/* AttendSmart custom styles */
+body {
+  background: #f4f6f8;
+  font-family: "Segoe UI", Roboto, Helvetica Neue, sans-serif;
+}
+.navbar-brand {
+  font-size: 1.25rem;
+}
+.card {
+  border: none;
+  border-radius: 12px;
+}
+.card-header {
+  border-radius: 12px 12px 0 0 !important;
+  font-weight: 600;
+}
+.status-badge-1, .status-badge-2, .status-badge-3, .status-badge-4, .status-badge-5, .status-badge-6 {
+  font-size: 0.85rem;
+}
+.uppercase {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+.badge {
+  font-weight: 500;
+}
+.fw-bold { font-weight: 700; }
+.btn-group .btn.flex-fill { flex: 1 1 0%; }
+.table thead th { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.alert { border-radius: 10px; }

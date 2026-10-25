@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h1 class="h3"><i class="bi bi-clipboard-check me-2"></i>Live Class Status — {{ today }}</h1>
+    <p class="text-muted">Mark each period as <span class="badge bg-success">Attending</span> or <span class="badge bg-warning text-dark">Cancelled</span>, and add a class note so students know where you left off.</p>
+  </div>
+  <a href="{{ url_for('student_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-eye me-1"></i>View as Student
+  </a>
+</div>
+
+{% if slots|length == 0 %}
+<div class="alert alert-warning">
+  No timetable slots found for <strong>{{ weekday }}</strong>. Go to <a href="{{ url_for('lecturer_timetable') }}">Edit Timetable</a> to add periods first.
+</div>
+{% else %}
+<div class="row">
+  {% for slot in slots %}
+    {% set sess = sessions.get(slot.period_number) %}
+    <div class="col-12 col-md-6 col-lg-4 mb-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-header d-flex justify-content-between align-items-center bg-light">
+          <span class="badge bg-primary rounded-pill">Period {{ sess.period_number if sess else slot.period_number }}</span>
+          <span class="small text-muted">{{ slot.start_time }} – {{ slot.end_time }}</span>
+        </div>
+        <div class="card-body">
+          <h5 class="card-title">{{ sess.subject.code if sess else slot.subject.code }} — {{ sess.subject.name if sess else slot.subject.name }}</h5>
+
+          <div class="mb-3">
+            <label class="form-label d-block small text-muted uppercase">Status</label>
+            <div class="btn-group w-100" role="group">
+              <button type="button" class="btn flex-fill status-btn {% if not sess or sess.status=='scheduled' %}btn-outline-secondary{% else %}btn-secondary{% endif %} btn-sm" onclick="setStatus({{ sess.id if sess else -1 }}, 'scheduled')">Scheduled</button>
+              <button type="button" class="btn flex-fill status-btn {% if sess and sess.status=='attending' %}btn-success{% else %}btn-outline-success{% endif %} btn-sm" onclick="setStatus({{ sess.id if sess else -1 }}, 'attending')">Attending</button>
+              <button type="button" class="btn flex-fill status-btn {% if sess and sess.status=='cancelled' %}btn-warning{% else %}btn-outline-warning{% endif %} btn-sm" onclick="setStatus({{ sess.id if sess else -1 }}, 'cancelled')">Cancelled</button>
+            </div>
+            <div class="status-msg mt-2" id="msg-{{ sess.id if sess else slot.id }}"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label d-block small text-muted uppercase">Class note (where you stopped)</label>
+            <textarea class="form-control form-control-sm" rows="2" id="note-{{ sess.id if sess else slot.id }}">{{ sess.class_note if sess and sess.class_note else '' }}</textarea>
+            <div class="mt-2">
+              <button class="btn btn-outline-primary btn-sm" onclick="saveNote({{ sess.id if sess else -1 }})">Save note</button>
+              <span id="note-msg-{{ sess.id if sess else slot.id }}" class="small ms-2 text-success"></span>
+            </div>
+          </div>
+
+          {% if sess %}
+            <div class="mt-3 p-2 bg-light rounded">
+              <i class="bi bi-clock-history me-1 text-muted small"></i>
+              <span class="text-muted small">Last updated: {{ sess.updated_at }} by {{ sess.updated_by }}</span>
+              <span class="float-end text-muted small">{{ sess.status }}</span>
+            </div>
+          {% else %}
+            <div class="mt-3 p-2 bg-light rounded text-muted small">
+              <i class="bi bi-info-circle me-1"></i>Not yet created for today. Mark a status to create it.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+async function setStatus(sessionId, status) {
+  if (!sessionId) {
+    // Create a session first by setting status via the lecturer page POST isn't available via API for new ones;
+    // fall back: reload after creating via timetable editor. Show a hint.
+    document.getElementById('msg-' + sessionId).innerHTML = '<span class="text-danger small">Create the session in Edit Timetable first.</span>';
+    return;
+  }
+  const res = await fetch('/api/session/' + sessionId + '/status', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'status=' + status
+  });
+  const box = document.getElementById('msg-' + sessionId);
+  if (res.ok) {
+    box.innerHTML = '<span class="text-success small"><i class="bi bi-check-circle"></i> Saved: ' + status + '</span>';
+    // refresh badge styles
+    updateStatusButtons(sessionId, status);
+  } else {
+    box.innerHTML = '<span class="text-danger small">Failed to save.</span>';
+  }
+}
+
+function updateStatusButtons(sessionId, status) {
+  document.querySelectorAll('button[onclick^="setStatus(' + sessionId + '"]').forEach(btn => {
+    btn.classList.remove('btn-success', 'btn-warning', 'btn-secondary');
+    btn.classList.add('btn-outline-secondary', 'btn-outline-success', 'btn-outline-warning');
+  });
+  const map = {'attending':'btn-success', 'cancelled':'btn-warning', 'scheduled':'btn-secondary'};
+  document.querySelector('button[onclick="setStatus(' + sessionId + ', \'' + status + '\')"]').classList.remove('btn-outline-secondary', 'btn-outline-success', 'btn-outline-warning');
+  document.querySelector('button[onclick="setStatus(' + sessionId + ', \'' + status + '\')"]').classList.add(map[status]);
+}
+
+async function saveNote(sessionId) {
+  const note = document.getElementById('note-' + sessionId).value;
+  const res = await fetch('/api/session/' + sessionId + '/note', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'note=' + encodeURIComponent(note)
+  });
+  const box = document.getElementById('note-msg-' + sessionId);
+  if (res.ok) {
+    box.innerText = 'Note saved ✓';
+    setTimeout(() => box.innerText = '', 2000);
+  } else {
+    box.innerText = 'Failed to save note.';
+    box.className = 'small ms-2 text-danger';
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="h3 mb-3"><i class="bi bi-house-door me-2"></i>Student Dashboard — {{ user.roll_number }}</h1>
+
+{% if user.role != 'student' %}
+<div class="alert alert-warning">This view is for students.</div>
+{% endif %}
+
+<!-- Live timetable for today -->
+<div class="card mb-4 shadow-sm">
+  <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-broadcast me-1"></i>Today's Timetable — {{ today }} ({{ weekday }})</span>
+    <span class="badge bg-light text-dark small" id="liveBadge">
+      <i class="bi bi-wifi2 me-1"></i>Live
+    </span>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle" id="timetableTable">
+        <thead class="table-success">
+          <tr>
+            <th style="width:8%">Period</th>
+            <th style="width:20%">Time</th>
+            <th>Subject</th>
+            <th style="width:20%">Status</th>
+            <th style="width:22%">Your Attendance</th>
+          </tr>
+        </thead>
+        <tbody id="timetableBody">
+          {% for s in sessions %}
+            <tr data-id="{{ s.id }}">
+              <td>{{ s.period_number }}</td>
+              <td>{{ s.subject.start_time if s.subject.start_time else '' }}</td>
+              <td>
+                <strong>{{ s.subject.code }}</strong><br><small class="text-muted">{{ s.subject.name }}</small>
+              </td>
+              <td>
+                <span class="badge status-badge-{{ s.id }} {% if s.status=='attending' %}bg-success{% elif s.status=='cancelled' %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+                  {{ s.status|title }}
+                </span>
+              </td>
+              <td>
+                {% if s.status == 'cancelled' %}
+                  <span class="text-muted"><i class="bi bi-dash-circle"></i> Cancelled — not counted</span>
+                {% else %}
+                  <button class="btn btn-sm btn-outline-primary markBtn" data-id="{{ s.id }}">Mark Present</button>
+                  <span id="markMsg-{{ s.id }}" class="small ms-2"></span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-4">No classes scheduled for today.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-3 small text-muted">
+      <i class="bi bi-info-circle me-1"></i>
+      Status updates live from the lecturer/CR. Cancelled classes do not count against your attendance.
+    </div>
+  </div>
+</div>
+
+<!-- Day-wise attendance -->
+<div class="card mb-4 shadow-sm">
+  <div class="card-header bg-info text-white">
+    <h5 class="mb-0"><i class="bi bi-calendar-week me-1"></i>Day-wise Attendance</h5>
+  </div>
+  <div class="card-body">
+    {% if day_rows %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr><th>Date</th><th>Classes Held</th><th>Attended</th><th>Attendance %</th></tr>
+          </thead>
+          <tbody>
+            {% for r in day_rows %}
+              <tr>
+                <td>{{ r.date }}</td>
+                <td>{{ r.held }}</td>
+                <td>{{ r.attended }}</td>
+                <td>
+                  <span class="{% if r.pct >= 75 %}text-success{% else %}text-danger{% endif %} fw-bold">{{ r.pct }}%</span>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-muted">No attendance records yet.</p>
+    {% endif %}
+    <div class="mt-3">
+      <strong>Overall:</strong> {{ total_attended }} / {{ total_held }} classes &nbsp;<span class="{% if overall_pct >= 75 %}text-success{% else %}text-danger{% endif %} fw-bold">({{ overall_pct }}%)</span>
+    </div>
+  </div>
+</div>
+
+<!-- Subject-wise attendance -->
+<div class="card shadow-sm">
+  <div class="card-header bg-dark text-white">
+    <h5 class="mb-0"><i class="bi bi-book me-1"></i>Subject-wise Attendance (75% rule)</h5>
+  </div>
+  <div class="card-body">
+    {% if subject_rows %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle">
+          <thead class="table-light">
+            <tr>
+              <th style="width:16%">Subject</th>
+              <th style="width:12%">Held</th>
+              <th style="width:12%">Attended</th>
+              <th style="width:14%">%</th>
+              <th>75% Rule</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in subject_rows %}
+              <tr>
+                <td><strong>{{ r.code }}</strong><br><small class="text-muted">{{ r.name }}</small></td>
+                <td>{{ r.held }}</td>
+                <td>{{ r.attended }}</td>
+                <td><span class="{% if r.pct >= 75 %}text-success{% else %}text-danger{% endif %} fw-bold">{{ r.pct }}%</span></td>
+                <td>
+                  <span class="badge {% if r.kind=='safe' %}bg-success{% elif r.kind=='need' %}bg-danger{% else %}bg-secondary{% endif %}">{{ r.msg }}</span>
+                  {% if r.kind=='safe' %}<br><small class="text-success">✓ Safe to skip {{ r.count }}</small>
+                  {% elif r.kind=='need' %}<br><small class="text-danger">⚠ Attend next {{ r.count }}</small>{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="text-muted">No subject records yet.</p>
+    {% endif %}
+    <p class="small text-muted mt-3">
+      Cancelled classes are excluded. Formula: you can skip more when above 75%; attend more classes to climb back to 75% when below.
+    </p>
+  </div>
+</div>
+
+<script>
+const POLL_MS = 10000;
+let lastUpdated = '';
+
+async function fetchTimetable() {
+  try {
+    const res = await fetch('/api/timetable');
+    const data = await res.json();
+    renderTimetable(data);
+    if (data.sessions.length) {
+      const latest = data.sessions.reduce((a, b) => (a.updated_at || '') > (b.updated_at || '') ? a : b);
+      if (latest.updated_at && latest.updated_at !== lastUpdated) {
+        lastUpdated = latest.updated_at;
+        flashLive('Updated just now: ' + latest.subject + ' → ' + latest.status);
+      }
+    }
+  } catch (e) {
+    console.error('poll failed', e);
+  }
+}
+
+function renderTimetable(data) {
+  document.getElementById('liveBadge').title = 'Last updated: ' + data.date;
+  const tbody = document.getElementById('timetableBody');
+  tbody.innerHTML = '';
+  data.sessions.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.dataset.id = s.id;
+    const badgeClass = s.status === 'attending' ? 'bg-success' : (s.status === 'cancelled' ? 'bg-warning text-dark' : 'bg-secondary');
+    const noteHtml = s.note ? `<div class="mt-1 small text-warning"><i class="bi bi-chat-text me-1"></i><b>Note:</b> ${escapeHtml(s.note)}</div>` : '';
+    const updatedHtml = s.updated_at ? `<div class="small text-muted"><i class="bi bi-clock me-1"></i>${s.updated_at} by ${escapeHtml(s.updated_by || 'teacher')}</div>` : '';
+    let attendanceHtml = '';
+    if (s.status === 'cancelled') {
+      attendanceHtml = '<span class="text-muted"><i class="bi bi-dash-circle"></i> Cancelled — not counted</span>';
+    } else {
+      attendanceHtml = `
+        <button class="btn btn-sm btn-outline-primary markBtn" data-id="${s.id}">Mark Present</button>
+        <span id="markMsg-${s.id}" class="small ms-2"></span>
+        ${noteHtml}
+        ${updatedHtml}
+      `;
+    }
+    tr.innerHTML = `
+      <td>${s.period}</td>
+      <td></td>
+      <td><strong>${escapeHtml(s.subject)}</strong></td>
+      <td><span class="badge ${badgeClass}">${s.status.charAt(0).toUpperCase() + s.status.slice(1)}</span></td>
+      <td>${attendanceHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  attachMarkListeners();
+}
+
+function escapeHtml(text) {
+  const d = document.createElement('div');
+  d.appendChild(document.createTextNode(text));
+  return d.innerHTML;
+}
+
+function flashLive(msg) {
+  const badge = document.getElementById('liveBadge');
+  badge.classList.add('bg-warning', 'text-dark');
+  badge.title = msg;
+  setTimeout(() => badge.classList.remove('bg-warning', 'text-dark'), 2000);
+}
+
+function attachMarkListeners() {
+  document.querySelectorAll('.markBtn').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      const msg = document.getElementById('markMsg-' + id);
+      try {
+        const res = await fetch('/api/attendance/mark', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: 'session_id=' + id + '&present=true'
+        });
+        if (res.ok) {
+          btn.disabled = true;
+          btn.innerText = 'Marked ✓';
+          btn.classList.replace('btn-outline-primary', 'btn-success');
+          msg.innerText = 'Attendance recorded';
+          msg.className = 'small ms-2 text-success';
+        } else {
+          msg.innerText = 'Failed';
+          msg.className = 'small ms-2 text-danger';
+        }
+      } catch (e) {
+        msg.innerText = 'Error';
+        msg.className = 'small ms-2 text-danger';
+      }
+    };
+  });
+}
+
+// Poll every 10 seconds
+setInterval(fetchTimetable, POLL_MS);
+// Initial fetch
+fetchTimetable();
+</script>
+{% endblock %}
